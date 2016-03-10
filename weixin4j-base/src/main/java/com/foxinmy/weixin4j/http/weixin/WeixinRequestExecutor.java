@@ -12,7 +12,6 @@ import com.foxinmy.weixin4j.http.HttpMethod;
 import com.foxinmy.weixin4j.http.HttpParams;
 import com.foxinmy.weixin4j.http.HttpRequest;
 import com.foxinmy.weixin4j.http.HttpResponse;
-import com.foxinmy.weixin4j.http.HttpStatus;
 import com.foxinmy.weixin4j.http.apache.FormBodyPart;
 import com.foxinmy.weixin4j.http.apache.HttpMultipartMode;
 import com.foxinmy.weixin4j.http.apache.MultipartEntity;
@@ -31,7 +30,7 @@ import com.foxinmy.weixin4j.xml.XmlStream;
  * @className WeixinRequestExecutor
  * @author jy
  * @date 2015年8月15日
- * @since JDK 1.7
+ * @since JDK 1.6
  * @see
  */
 public class WeixinRequestExecutor {
@@ -81,8 +80,8 @@ public class WeixinRequestExecutor {
 
 	public WeixinResponse post(String url, FormBodyPart... bodyParts)
 			throws WeixinException {
-		MultipartEntity entity = new MultipartEntity(HttpMultipartMode.STRICT,
-				null, Consts.UTF_8);
+		MultipartEntity entity = new MultipartEntity(
+				HttpMultipartMode.BROWSER_COMPATIBLE, null, Consts.UTF_8);
 		for (FormBodyPart bodyPart : bodyParts) {
 			entity.addPart(bodyPart);
 		}
@@ -95,14 +94,8 @@ public class WeixinRequestExecutor {
 		request.setParams(params);
 		try {
 			HttpResponse httpResponse = httpClient.execute(request);
-			HttpStatus status = httpResponse.getStatus();
 			HttpHeaders headers = httpResponse.getHeaders();
-			if (status.getStatusCode() >= HttpStatus.SC_MULTIPLE_CHOICES) {
-				throw new WeixinException(String.format("request fail : %d-%s",
-						status.getStatusCode(), status.getStatusText()));
-			}
-			WeixinResponse response = new WeixinResponse(headers, status,
-					httpResponse.getBody());
+			WeixinResponse response = new WeixinResponse(httpResponse);
 			String contentType = headers.getFirst(HttpHeaders.CONTENT_TYPE);
 			String disposition = headers
 					.getFirst(HttpHeaders.CONTENT_DISPOSITION);

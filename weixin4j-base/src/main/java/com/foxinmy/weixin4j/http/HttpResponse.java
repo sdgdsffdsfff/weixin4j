@@ -8,7 +8,7 @@ import java.io.InputStream;
  * @className HttpResponse
  * @author jy
  * @date 2015年5月30日
- * @since JDK 1.7
+ * @since JDK 1.6
  * @see
  */
 public interface HttpResponse extends HttpMessage {
@@ -24,14 +24,21 @@ public interface HttpResponse extends HttpMessage {
 	 * 
 	 * @return
 	 */
-	HttpStatus getStatus() throws HttpClientException;
+	HttpStatus getStatus();
 
 	/**
 	 * 响应内容
 	 * 
 	 * @return
 	 */
-	InputStream getBody() throws HttpClientException;
+	InputStream getBody();
+
+	/**
+	 * 响应内容
+	 * 
+	 * @return
+	 */
+	byte[] getContent();
 
 	/**
 	 * 释放资源

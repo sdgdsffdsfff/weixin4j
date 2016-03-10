@@ -12,12 +12,12 @@ import com.foxinmy.weixin4j.model.WeixinPayAccount;
 import com.foxinmy.weixin4j.util.RandomUtil;
 
 /**
- * 刷卡支付
+ * 刷卡支付订单详情
  * 
  * @className MicroPayPackage
  * @author jy
  * @date 2014年11月17日
- * @since JDK 1.7
+ * @since JDK 1.6
  * @see
  */
 @XmlRootElement
@@ -59,31 +59,36 @@ public class MicroPayPackage extends PayPackage {
 	@XmlElement(name = "auth_code")
 	@JSONField(name = "auth_code")
 	private String authCode;
+	/**
+	 * 指定支付方式:no_credit--指定不能使用信用卡支付
+	 */
+	@XmlElement(name = "limit_pay")
+	@JSONField(name = "limit_pay")
+	private String limitPay;
 
 	protected MicroPayPackage() {
 		// jaxb required
 	}
 
-	public MicroPayPackage(WeixinPayAccount weixinAccount, String body,
-			String attach, String outTradeNo, double totalFee,
-			String spbillCreateIp, String authCode) {
+	public MicroPayPackage(WeixinPayAccount weixinAccount, String authCode,
+			String body, String outTradeNo, double totalFee, String createIp) {
 		this(weixinAccount.getId(), weixinAccount.getMchId(), weixinAccount
-				.getDeviceInfo(), RandomUtil.generateString(16), body, attach,
-				outTradeNo, totalFee, spbillCreateIp, null, null, null,
-				authCode);
+				.getDeviceInfo(), authCode, body, outTradeNo, totalFee,
+				createIp, null, null, null, null, null);
 	}
 
 	public MicroPayPackage(String appId, String mchId, String deviceInfo,
-			String nonceStr, String body, String attach, String outTradeNo,
-			double totalFee, String spbillCreateIp, Date timeStart,
-			Date timeExpire, String goodsTag, String authCode) {
-		super(body, attach, outTradeNo, totalFee, spbillCreateIp, timeStart,
-				timeExpire, goodsTag, null);
+			String authCode, String body, String outTradeNo, double totalFee,
+			String createIp, String attach, Date timeStart, Date timeExpire,
+			String goodsTag, String limitPay) {
+		super(body, outTradeNo, totalFee, null, createIp, null, timeStart,
+				timeExpire, goodsTag);
 		this.appId = appId;
 		this.mchId = mchId;
 		this.deviceInfo = deviceInfo;
-		this.nonceStr = nonceStr;
+		this.nonceStr = RandomUtil.generateString(16);
 		this.authCode = authCode;
+		this.limitPay = limitPay;
 	}
 
 	public String getAppId() {
@@ -116,6 +121,14 @@ public class MicroPayPackage extends PayPackage {
 
 	public void setAuthCode(String authCode) {
 		this.authCode = authCode;
+	}
+
+	public String getLimitPay() {
+		return limitPay;
+	}
+
+	public void setLimitPay(String limitPay) {
+		this.limitPay = limitPay;
 	}
 
 	@Override

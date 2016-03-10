@@ -35,13 +35,12 @@ import com.foxinmy.weixin4j.model.Consts;
 import com.foxinmy.weixin4j.model.Token;
 import com.foxinmy.weixin4j.model.WeixinPayAccount;
 import com.foxinmy.weixin4j.mp.payment.v2.OrderV2;
-import com.foxinmy.weixin4j.mp.payment.v2.PayUtil2;
+import com.foxinmy.weixin4j.mp.payment.v2.PayPackageV2;
 import com.foxinmy.weixin4j.mp.payment.v2.RefundRecordV2;
 import com.foxinmy.weixin4j.mp.payment.v2.RefundResultV2;
 import com.foxinmy.weixin4j.mp.token.WeixinTokenCreator;
-import com.foxinmy.weixin4j.payment.PayUtil;
+import com.foxinmy.weixin4j.payment.PayRequest;
 import com.foxinmy.weixin4j.token.TokenHolder;
-import com.foxinmy.weixin4j.token.TokenStorager;
 import com.foxinmy.weixin4j.type.BillType;
 import com.foxinmy.weixin4j.type.IdQuery;
 import com.foxinmy.weixin4j.type.RefundType;
@@ -49,8 +48,9 @@ import com.foxinmy.weixin4j.type.SignType;
 import com.foxinmy.weixin4j.util.DateUtil;
 import com.foxinmy.weixin4j.util.DigestUtil;
 import com.foxinmy.weixin4j.util.MapUtil;
+import com.foxinmy.weixin4j.util.RandomUtil;
 import com.foxinmy.weixin4j.util.StringUtil;
-import com.foxinmy.weixin4j.util.Weixin4jConfigUtil;
+import com.foxinmy.weixin4j.util.Weixin4jSettings;
 import com.foxinmy.weixin4j.xml.ListsuffixResultDeserializer;
 
 /**
@@ -59,28 +59,119 @@ import com.foxinmy.weixin4j.xml.ListsuffixResultDeserializer;
  * @className Pay2Api
  * @author jy
  * @date 2014年10月28日
- * @since JDK 1.7
+ * @since JDK 1.6
  * @see
  */
 public class Pay2Api extends MpApi {
 
-	private final WeixinPayAccount weixinAccount;
+	private final Weixin4jSettings settings;
 	private final TokenHolder tokenHolder;
 
 	public Pay2Api() {
-		this(JSON.parseObject(Weixin4jConfigUtil.getValue("account"),
-				WeixinPayAccount.class));
+		this(new Weixin4jSettings());
 	}
 
-	public Pay2Api(WeixinPayAccount weixinAccount) {
-		this(weixinAccount, DEFAULT_TOKEN_STORAGER);
+	public Pay2Api(Weixin4jSettings settings) {
+		this.tokenHolder = new TokenHolder(new WeixinTokenCreator(settings
+				.getWeixinAccount().getId(), settings.getWeixinAccount()
+				.getSecret()), settings.getTokenStorager0());
+		this.settings = settings;
 	}
 
-	public Pay2Api(WeixinPayAccount weixinAccount, TokenStorager tokenStorager) {
-		this.weixinAccount = weixinAccount;
-		this.tokenHolder = new TokenHolder(new WeixinTokenCreator(
-				weixinAccount.getId(), weixinAccount.getSecret()),
-				tokenStorager);
+	public WeixinPayAccount getPayAccount() {
+		return this.settings.getWeixinPayAccount();
+	}
+
+	/**
+	 * 生成V2.x版本JSAPI支付字符串
+	 * 
+	 * @param body
+	 *            支付详情
+	 * @param outTradeNo
+	 *            订单号
+	 * @param totalFee
+	 *            订单总额 按实际金额传入即可(元) 构造函数会转换为分
+	 * @param notifyUrl
+	 *            支付回调URL
+	 * @param createIp
+	 *            订单生成的机器 IP
+	 * @return 支付json串
+	 */
+	public String createPayJsRequestJson(String body, String outTradeNo,
+			double totalFee, String notifyUrl, String createIp) {
+		return createPayJsRequestJson(body, outTradeNo, totalFee, notifyUrl,
+				createIp, null, null, null, 0d, 0d, null);
+	}
+
+	/**
+	 * 生成V2.x版本JSAPI支付字符串
+	 * 
+	 * @param body
+	 *            支付详情
+	 * @param outTradeNo
+	 *            订单号
+	 * @param totalFee
+	 *            订单总额 按实际金额传入即可(元) 构造函数会转换为分
+	 * @param notifyUrl
+	 *            支付回调URL
+	 * @param createIp
+	 *            订单生成的机器 IP
+	 * @param attach
+	 *            附加数据，在查询API和支付通知中原样返回，该字段主要用于商户携带订单的自定义数据
+	 * @param timeStart
+	 *            订单生成时间，格式为yyyyMMddHHmmss
+	 * @param timeExpire
+	 *            订单失效时间，格式为yyyyMMddHHmmss;注意：最短失效时间间隔必须大于5分钟
+	 * @param transportFee
+	 *            物流费用 如有值 必须保证 transportFee+productFee=totalFee
+	 * @param transportFee
+	 *            商品费用 如有值 必须保证 transportFee+productFee=totalFee
+	 * @param goodsTag
+	 *            商品标记，代金券或立减优惠功能的参数
+	 * @return 支付json串
+	 */
+	public String createPayJsRequestJson(String body, String outTradeNo,
+			double totalFee, String notifyUrl, String createIp, String attach,
+			Date timeStart, Date timeExpire, double transportFee,
+			double productFee, String goodsTag) {
+		PayPackageV2 payPackage = new PayPackageV2(getPayAccount()
+				.getPartnerId(), body, outTradeNo, totalFee, notifyUrl,
+				createIp);
+		payPackage.setAttach(attach);
+		payPackage.setTimeStart(timeStart);
+		payPackage.setTimeExpire(timeExpire);
+		payPackage.setTransportFee(transportFee);
+		payPackage.setProductFee(productFee);
+		payPackage.setGoodsTag(goodsTag);
+		PayRequest payRequest = new PayRequest(getPayAccount().getId(),
+				DigestUtil.packageSign(payPackage, getPayAccount()
+						.getPartnerKey()));
+		payRequest.setPaySign(DigestUtil.paysignSha(payRequest, getPayAccount()
+				.getPaySignKey()));
+		payRequest.setSignType(SignType.SHA1);
+		return JSON.toJSONString(payRequest);
+	}
+
+	/**
+	 * 创建V2.x NativePay支付链接
+	 * 
+	 * @param productId
+	 *            与订单ID等价
+	 * @return 支付链接
+	 */
+	public String createNativePayRequestURL(String productId) {
+		Map<String, String> map = new HashMap<String, String>();
+		String timestamp = DateUtil.timestamp2string();
+		String noncestr = RandomUtil.generateString(16);
+		map.put("appid", getPayAccount().getId());
+		map.put("timestamp", timestamp);
+		map.put("noncestr", noncestr);
+		map.put("productid", productId);
+		map.put("appkey", getPayAccount().getPaySignKey());
+		String sign = DigestUtil.paysignSha(map, null);
+		String ordernative_v2_uri = getRequestUri("ordernative_v2_uri");
+		return String.format(ordernative_v2_uri, sign, getPayAccount().getId(),
+				productId, timestamp, noncestr);
 	}
 
 	/**
@@ -99,23 +190,23 @@ public class Pay2Api extends MpApi {
 		StringBuilder sb = new StringBuilder();
 		sb.append(idQuery.getType().getName()).append("=")
 				.append(idQuery.getId());
-		sb.append("&partner=").append(weixinAccount.getPartnerId());
+		sb.append("&partner=").append(getPayAccount().getPartnerId());
 		String part = sb.toString();
-		sb.append("&key=").append(weixinAccount.getPartnerKey());
+		sb.append("&key=").append(getPayAccount().getPartnerKey());
 		String sign = DigestUtil.MD5(sb.toString()).toUpperCase();
 		sb.delete(0, sb.length());
 		sb.append(part).append("&sign=").append(sign);
 
 		String timestamp = DateUtil.timestamp2string();
 		JSONObject obj = new JSONObject();
-		obj.put("appid", weixinAccount.getId());
-		obj.put("appkey", weixinAccount.getPaySignKey());
+		obj.put("appid", getPayAccount().getId());
+		obj.put("appkey", getPayAccount().getPaySignKey());
 		obj.put("package", sb.toString());
 		obj.put("timestamp", timestamp);
-		String signature = PayUtil2.paysignSha(obj);
+		String signature = DigestUtil.paysignSha(obj, null);
 
 		obj.clear();
-		obj.put("appid", weixinAccount.getId());
+		obj.put("appid", getPayAccount().getId());
 		obj.put("package", sb.toString());
 		obj.put("timestamp", timestamp);
 		obj.put("app_signature", signature);
@@ -177,20 +268,20 @@ public class Pay2Api extends MpApi {
 			// 填写为 1.0 时,操作员密码为明文
 			// 填写为 1.1 时,操作员密码为 MD5(密码)值
 			map.put("service_version", "1.1");
-			map.put("partner", weixinAccount.getPartnerId());
+			map.put("partner", getPayAccount().getPartnerId());
 			map.put("out_refund_no", outRefundNo);
 			map.put("total_fee", DateUtil.formaFee2Fen(totalFee));
 			map.put("refund_fee", DateUtil.formaFee2Fen(refundFee));
 			map.put(idQuery.getType().getName(), idQuery.getId());
 			if (StringUtil.isBlank(opUserId)) {
-				opUserId = weixinAccount.getPartnerId();
+				opUserId = getPayAccount().getPartnerId();
 			}
 			map.put("op_user_id", opUserId);
 			if (mopara != null && !mopara.isEmpty()) {
 				map.putAll(mopara);
 			}
-			String sign = PayUtil
-					.paysignMd5(map, weixinAccount.getPartnerKey());
+			String sign = DigestUtil.paysignMd5(map, getPayAccount()
+					.getPartnerKey());
 			map.put("sign", sign.toUpperCase());
 
 			SSLContext ctx = null;
@@ -225,8 +316,8 @@ public class Pay2Api extends MpApi {
 			KeyManagerFactory kmf = KeyManagerFactory
 					.getInstance(com.foxinmy.weixin4j.model.Consts.SunX509);
 			ks = KeyStore.getInstance(com.foxinmy.weixin4j.model.Consts.PKCS12);
-			ks.load(ca, weixinAccount.getPartnerId().toCharArray());
-			kmf.init(ks, weixinAccount.getPartnerId().toCharArray());
+			ks.load(ca, getPayAccount().getPartnerId().toCharArray());
+			kmf.init(ks, getPayAccount().getPartnerId().toCharArray());
 
 			ctx = SSLContext.getInstance(com.foxinmy.weixin4j.model.Consts.TLS);
 			ctx.init(kmf.getKeyManagers(), tmf.getTrustManagers(),
@@ -346,7 +437,7 @@ public class Pay2Api extends MpApi {
 	 * @since V2
 	 * @throws WeixinException
 	 */
-	public File downloadbill(Date billDate, BillType billType)
+	public File downloadBill(Date billDate, BillType billType)
 			throws WeixinException {
 		if (billDate == null) {
 			Calendar now = Calendar.getInstance();
@@ -357,22 +448,22 @@ public class Pay2Api extends MpApi {
 			billType = BillType.ALL;
 		}
 		String formatBillDate = DateUtil.fortmat2yyyyMMdd(billDate);
-		String bill_path = Weixin4jConfigUtil.getValue("bill_path");
 		String fileName = String.format("%s_%s_%s.txt", formatBillDate,
-				billType.name().toLowerCase(), weixinAccount.getId());
-		File file = new File(String.format("%s/%s", bill_path, fileName));
+				billType.name().toLowerCase(), getPayAccount().getId());
+		File file = new File(String.format("%s/weixin4j_bill_%s",
+				settings.getTmpdir0(), fileName));
 		if (file.exists()) {
 			return file;
 		}
 		String downloadbill_uri = getRequestUri("downloadbill_v2_uri");
 
 		Map<String, String> map = new LinkedHashMap<String, String>();
-		map.put("spid", weixinAccount.getPartnerId());
+		map.put("spid", getPayAccount().getPartnerId());
 		map.put("trans_time", DateUtil.fortmat2yyyy_MM_dd(billDate));
 		map.put("stamp", DateUtil.timestamp2string());
 		map.put("cft_signtype", "0");
 		map.put("mchtype", Integer.toString(billType.getVal()));
-		map.put("key", weixinAccount.getPartnerKey());
+		map.put("key", getPayAccount().getPartnerKey());
 		String sign = DigestUtil.MD5(MapUtil.toJoinString(map, false, false));
 		map.put("sign", sign.toLowerCase());
 		WeixinResponse response = weixinExecutor.get(downloadbill_uri, map);
@@ -422,9 +513,10 @@ public class Pay2Api extends MpApi {
 		String refundquery_uri = getRequestUri("refundquery_v2_uri");
 		Map<String, String> map = new HashMap<String, String>();
 		map.put("input_charset", Consts.UTF_8.name());
-		map.put("partner", weixinAccount.getPartnerId());
+		map.put("partner", getPayAccount().getPartnerId());
 		map.put(idQuery.getType().getName(), idQuery.getId());
-		String sign = PayUtil.paysignMd5(map, weixinAccount.getPartnerKey());
+		String sign = DigestUtil.paysignMd5(map, getPayAccount()
+				.getPartnerKey());
 		map.put("sign", sign.toLowerCase());
 		WeixinResponse response = weixinExecutor.get(refundquery_uri, map);
 		return ListsuffixResultDeserializer.deserialize(response.getAsString(),
@@ -454,15 +546,15 @@ public class Pay2Api extends MpApi {
 		Token token = tokenHolder.getToken();
 
 		Map<String, String> map = new HashMap<String, String>();
-		map.put("appid", weixinAccount.getId());
-		map.put("appkey", weixinAccount.getPaySignKey());
+		map.put("appid", getPayAccount().getId());
+		map.put("appkey", getPayAccount().getPaySignKey());
 		map.put("openid", openId);
 		map.put("transid", transid);
 		map.put("out_trade_no", outTradeNo);
 		map.put("deliver_timestamp", DateUtil.timestamp2string());
 		map.put("deliver_status", status ? "1" : "0");
 		map.put("deliver_msg", statusMsg);
-		map.put("app_signature", PayUtil2.paysignSha(map));
+		map.put("app_signature", DigestUtil.paysignSha(map, null));
 		map.put("sign_method", SignType.SHA1.name().toLowerCase());
 
 		WeixinResponse response = weixinExecutor.post(

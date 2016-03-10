@@ -3,6 +3,7 @@ package com.foxinmy.weixin4j.socket;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToMessageDecoder;
 import io.netty.handler.codec.http.FullHttpRequest;
+import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.QueryStringDecoder;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
@@ -14,9 +15,8 @@ import com.foxinmy.weixin4j.exception.WeixinException;
 import com.foxinmy.weixin4j.request.WeixinRequest;
 import com.foxinmy.weixin4j.type.EncryptType;
 import com.foxinmy.weixin4j.util.AesToken;
-import com.foxinmy.weixin4j.util.Consts;
 import com.foxinmy.weixin4j.util.MessageUtil;
-import com.foxinmy.weixin4j.util.StringUtil;
+import com.foxinmy.weixin4j.util.ServerToolkits;
 import com.foxinmy.weixin4j.xml.EncryptMessageHandler;
 
 /**
@@ -25,7 +25,7 @@ import com.foxinmy.weixin4j.xml.EncryptMessageHandler;
  * @className WeixinMessageDecoder
  * @author jy
  * @date 2014年11月13日
- * @since JDK 1.7
+ * @since JDK 1.6
  * @see <a
  *      href="http://mp.weixin.qq.com/wiki/0/61c3a8b9d50ac74f18bdf2e54ddfc4e0.html">加密接入指引</a>
  * @see com.foxinmy.weixin4j.request.WeixinRequest
@@ -44,12 +44,12 @@ public class WeixinMessageDecoder extends
 	@Override
 	protected void decode(ChannelHandlerContext ctx, FullHttpRequest req,
 			List<Object> out) throws WeixinException {
-		String messageContent = req.content().toString(Consts.UTF_8);
+		String messageContent = req.content().toString(ServerToolkits.UTF_8);
 		QueryStringDecoder queryDecoder = new QueryStringDecoder(req.getUri(),
 				true);
-		String methodName = req.getMethod().name();
+		HttpMethod method = req.getMethod();
 		logger.info("decode request:{} use {} method invoking", req.getUri(),
-				methodName);
+				method);
 		Map<String, List<String>> parameters = queryDecoder.parameters();
 		EncryptType encryptType = parameters.containsKey("encrypt_type") ? EncryptType
 				.valueOf(parameters.get("encrypt_type").get(0).toUpperCase())
@@ -68,9 +68,9 @@ public class WeixinMessageDecoder extends
 				"weixin_id").get(0) : null;
 		AesToken aesToken = aesTokenMap.get(weixinId);
 		String encryptContent = null;
-		if (!StringUtil.isBlank(messageContent)
+		if (!ServerToolkits.isBlank(messageContent)
 				&& encryptType == EncryptType.AES) {
-			if (StringUtil.isBlank(aesToken.getAesKey())) {
+			if (ServerToolkits.isBlank(aesToken.getAesKey())) {
 				throw new WeixinException(
 						"AESEncodingKey not be null in AES mode");
 			}
@@ -87,8 +87,12 @@ public class WeixinMessageDecoder extends
 			messageContent = MessageUtil.aesDecrypt(aesToken.getWeixinId(),
 					aesToken.getAesKey(), encryptContent);
 		}
-		out.add(new WeixinRequest(methodName, encryptType, echoStr, timeStamp,
-				nonce, signature, msgSignature, messageContent, encryptContent,
-				aesToken, parameters));
+		WeixinRequest request = new WeixinRequest(req.headers(), method,
+				req.getUri(), encryptType, echoStr, timeStamp, nonce,
+				signature, msgSignature, messageContent, encryptContent,
+				aesToken);
+		request.setDecoderResult(req.getDecoderResult());
+		request.setProtocolVersion(req.getProtocolVersion());
+		out.add(request);
 	}
 }

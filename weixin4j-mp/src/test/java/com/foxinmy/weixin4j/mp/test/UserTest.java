@@ -17,7 +17,7 @@ import com.foxinmy.weixin4j.mp.model.User;
  * @className UserTest
  * @author jy.hu
  * @date 2014年4月10日
- * @since JDK 1.7
+ * @since JDK 1.6
  */
 public class UserTest extends TokenTest {
 	private UserApi userApi;
@@ -29,7 +29,7 @@ public class UserTest extends TokenTest {
 
 	@Test
 	public void getUser() throws WeixinException {
-		User user = userApi.getUser("owGBft_vbBbOaQOmpEUE4xDLeRSU");
+		User user = userApi.getUser("o9Onds6fbeK0lDwD8lJt2PY1VRys");
 		Assert.assertNotNull(user);
 		System.out.println(user);
 		// following();

@@ -7,12 +7,14 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.logging.LoggingHandler;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.FutureListener;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
@@ -34,7 +36,7 @@ import com.foxinmy.weixin4j.util.AesToken;
  * @className WeixinServerBootstrap
  * @author jy
  * @date 2014年10月12日
- * @since JDK 1.7
+ * @since JDK 1.6
  * @see com.foxinmy.weixin4j.dispatcher.WeixinMessageMatcher
  * @see com.foxinmy.weixin4j.handler.WeixinMessageHandler
  * @see com.foxinmy.weixin4j.interceptor.WeixinMessageInterceptor
@@ -47,13 +49,13 @@ public final class WeixinServerBootstrap {
 			.getInstance(getClass());
 
 	/**
-	 * 默认boss线程数,一般设置为cpu的核数
+	 * boss线程数,默认设置为cpu的核数
 	 */
-	public final static int DEFAULT_BOSSTHREADS = 1;
+	public final static int DEFAULT_BOSSTHREADS;
 	/**
-	 * 默认worker线程数
+	 * worker线程数,默认设置为DEFAULT_BOSSTHREADS * 4
 	 */
-	public final static int DEFAULT_WORKERTHREADS = 20;
+	public final static int DEFAULT_WORKERTHREADS;
 	/**
 	 * 服务启动的默认端口
 	 */
@@ -77,6 +79,11 @@ public final class WeixinServerBootstrap {
 	 */
 	private final Map<String, AesToken> aesTokenMap;
 
+	static {
+		DEFAULT_BOSSTHREADS = Runtime.getRuntime().availableProcessors();
+		DEFAULT_WORKERTHREADS = DEFAULT_BOSSTHREADS * 4;
+	}
+
 	/**
 	 * 
 	 * 明文模式
@@ -92,15 +99,16 @@ public final class WeixinServerBootstrap {
 	/**
 	 * 明文模式 & 兼容模式 & 密文模式
 	 * 
-	 * @param appid
+	 * @param weixinId
 	 *            公众号的应用ID(appid/corpid) 密文&兼容模式下需要填写
+	 * 
 	 * @param token
 	 *            开发者填写的token 无论哪种模式都需要填写
 	 * @param aesKey
 	 *            消息加密的密钥 密文&兼容模式下需要填写
 	 */
-	public WeixinServerBootstrap(String appid, String token, String aesKey) {
-		this(new AesToken(appid, token, aesKey));
+	public WeixinServerBootstrap(String weixinId, String token, String aesKey) {
+		this(new AesToken(weixinId, token, aesKey));
 	}
 
 	/**
@@ -144,8 +152,8 @@ public final class WeixinServerBootstrap {
 			this.aesTokenMap.put(aesToken.getWeixinId(), aesToken);
 		}
 		this.aesTokenMap.put(null, aesTokens[0]);
-		this.messageHandlerList = new LinkedList<WeixinMessageHandler>();
-		this.messageInterceptorList = new LinkedList<WeixinMessageInterceptor>();
+		this.messageHandlerList = new ArrayList<WeixinMessageHandler>();
+		this.messageInterceptorList = new ArrayList<WeixinMessageInterceptor>();
 		this.messageDispatcher = new WeixinMessageDispatcher(messageMatcher);
 	}
 
@@ -169,14 +177,15 @@ public final class WeixinServerBootstrap {
 	 * 接受参数启动服务
 	 * 
 	 * @param bossThreads
-	 *            boss线程数,一般设置为cpu的核数
+	 *            boss线程数
 	 * @param workerThreads
 	 *            worker线程数
 	 * @param serverPort
 	 *            服务启动端口
+	 * @return
 	 * @throws WeixinException
 	 */
-	public void startup(int bossThreads, int workerThreads, int serverPort)
+	public void startup(int bossThreads, int workerThreads, final int serverPort)
 			throws WeixinException {
 		messageDispatcher.setMessageHandlerList(messageHandlerList);
 		messageDispatcher.setMessageInterceptorList(messageInterceptorList);
@@ -192,11 +201,21 @@ public final class WeixinServerBootstrap {
 					.childHandler(
 							new WeixinServerInitializer(aesTokenMap,
 									messageDispatcher));
-			Channel ch = b.bind(serverPort).sync().channel();
-			logger.info("weixin4j server startup OK:{}", serverPort);
+			Channel ch = b.bind(serverPort)
+					.addListener(new FutureListener<Void>() {
+						@Override
+						public void operationComplete(Future<Void> future)
+								throws Exception {
+							if (future.isSuccess()) {
+								logger.info("weixin4j server startup OK:{}",
+										serverPort);
+							} else {
+								logger.info("weixin4j server startup FAIL:{}",
+										serverPort);
+							}
+						}
+					}).sync().channel();
 			ch.closeFuture().sync();
-		} catch (WeixinException e) {
-			throw e;
 		} catch (InterruptedException e) {
 			throw new WeixinException(e);
 		} finally {
@@ -219,19 +238,6 @@ public final class WeixinServerBootstrap {
 	}
 
 	/**
-	 * 将某个消息处理器插入到头部
-	 * 
-	 * @param messageHandler
-	 *            消息处理器
-	 * @return
-	 */
-	public WeixinServerBootstrap insertFirstHandler(
-			WeixinMessageHandler messageHandler) {
-		messageHandlerList.add(0, messageHandler);
-		return this;
-	}
-
-	/**
 	 * 插入一个或多个消息拦截器
 	 * 
 	 * @param messageInterceptor
@@ -241,19 +247,6 @@ public final class WeixinServerBootstrap {
 	public WeixinServerBootstrap addInterceptor(
 			WeixinMessageInterceptor... messageInterceptor) {
 		messageInterceptorList.addAll(Arrays.asList(messageInterceptor));
-		return this;
-	}
-
-	/**
-	 * 将某个消息拦截器插入到头部
-	 * 
-	 * @param messageInterceptor
-	 *            消息拦截器
-	 * @return
-	 */
-	public WeixinServerBootstrap insertFirstInterceptor(
-			WeixinMessageInterceptor messageInterceptor) {
-		messageInterceptorList.add(0, messageInterceptor);
 		return this;
 	}
 
@@ -320,5 +313,5 @@ public final class WeixinServerBootstrap {
 		return this;
 	}
 
-	public final static String VERSION = "1.0.5";
+	public final static String VERSION = "1.1.6";
 }

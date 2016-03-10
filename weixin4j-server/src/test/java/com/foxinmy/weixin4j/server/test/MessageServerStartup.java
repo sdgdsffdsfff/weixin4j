@@ -19,13 +19,13 @@ import com.foxinmy.weixin4j.startup.WeixinServerBootstrap;
  * @className MessageServerStartup
  * @author jy
  * @date 2015年5月7日
- * @since JDK 1.7
+ * @since JDK 1.6
  * @see
  */
 public class MessageServerStartup {
 
 	// 公众号ID
-	final String appid = "wx4ab8f8de58159a57";
+	final String weixinId = "wx4ab8f8de58159a57";
 	// 开发者token
 	final String token = "weixin4j";
 	// AES密钥(安全模式)
@@ -49,7 +49,7 @@ public class MessageServerStartup {
 	 */
 	public void test2() throws WeixinException {
 		// 所有请求都回复调试的文本消息
-		new WeixinServerBootstrap(appid, token, aesKey).addHandler(
+		new WeixinServerBootstrap(weixinId, token, aesKey).addHandler(
 				DebugMessageHandler.global).startup();
 	}
 
@@ -68,7 +68,7 @@ public class MessageServerStartup {
 			}
 		};
 		// 当消息类型为文本(text)时回复「HelloWorld」, 否则回复调试消息
-		new WeixinServerBootstrap(appid, token, aesKey).addHandler(
+		new WeixinServerBootstrap(weixinId, token, aesKey).addHandler(
 				messageHandler, DebugMessageHandler.global).startup();
 	}
 
@@ -105,12 +105,17 @@ public class MessageServerStartup {
 					Exception exception) throws WeixinException {
 				System.err.println("请求处理完毕");
 			}
+
+			@Override
+			public int weight() {
+				return 0;
+			}
 		};
 		new WeixinServerBootstrap(token).addInterceptor(interceptor)
 				.openAlwaysResponse().startup();
 	}
 
 	public static void main(String[] args) throws Exception {
-		new MessageServerStartup().test3();
+		new MessageServerStartup().test1();
 	}
 }

@@ -6,7 +6,10 @@ import static io.netty.handler.codec.http.HttpResponseStatus.METHOD_NOT_ALLOWED;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.handler.codec.http.DefaultFullHttpResponse;
+import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 
@@ -16,10 +19,9 @@ import com.foxinmy.weixin4j.request.WeixinRequest;
 import com.foxinmy.weixin4j.response.SingleResponse;
 import com.foxinmy.weixin4j.type.EncryptType;
 import com.foxinmy.weixin4j.util.AesToken;
-import com.foxinmy.weixin4j.util.Consts;
 import com.foxinmy.weixin4j.util.HttpUtil;
 import com.foxinmy.weixin4j.util.MessageUtil;
-import com.foxinmy.weixin4j.util.StringUtil;
+import com.foxinmy.weixin4j.util.ServerToolkits;
 import com.foxinmy.weixin4j.xml.MessageTransferHandler;
 
 /**
@@ -28,7 +30,7 @@ import com.foxinmy.weixin4j.xml.MessageTransferHandler;
  * @className WeixinRequestHandler
  * @author jy
  * @date 2014年11月16日
- * @since JDK 1.7
+ * @since JDK 1.6
  * @see com.foxinmy.weixin4j.dispatcher.WeixinMessageDispatcher
  */
 public class WeixinRequestHandler extends
@@ -57,9 +59,9 @@ public class WeixinRequestHandler extends
 			throws WeixinException {
 		final AesToken aesToken = request.getAesToken();
 		if (aesToken == null
-				|| (StringUtil.isBlank(request.getSignature()) && StringUtil
+				|| (ServerToolkits.isBlank(request.getSignature()) && ServerToolkits
 						.isBlank(request.getMsgSignature()))) {
-			ctx.writeAndFlush(HttpUtil.createHttpResponse(BAD_REQUEST))
+			ctx.writeAndFlush(resolveResponse(BAD_REQUEST, request))
 					.addListener(ChannelFutureListener.CLOSE);
 			return;
 		}
@@ -67,15 +69,15 @@ public class WeixinRequestHandler extends
 		 * 公众平台:无论Get,Post都带signature参数,当开启aes模式时带msg_signature参数
 		 * 企业号:无论Get,Post都带msg_signature参数
 		 **/
-		if (request.getMethod().equals(HttpMethod.GET.name())) {
-			if (!StringUtil.isBlank(request.getSignature())
+		if (request.getMethod() == HttpMethod.GET) {
+			if (!ServerToolkits.isBlank(request.getSignature())
 					&& MessageUtil.signature(aesToken.getToken(),
 							request.getTimeStamp(), request.getNonce()).equals(
 							request.getSignature())) {
 				ctx.write(new SingleResponse(request.getEchoStr()));
 				return;
 			}
-			if (!StringUtil.isBlank(request.getMsgSignature())
+			if (!ServerToolkits.isBlank(request.getMsgSignature())
 					&& MessageUtil.signature(aesToken.getToken(),
 							request.getTimeStamp(), request.getNonce(),
 							request.getEchoStr()).equals(
@@ -84,15 +86,15 @@ public class WeixinRequestHandler extends
 						aesToken.getAesKey(), request.getEchoStr())));
 				return;
 			}
-			ctx.writeAndFlush(HttpUtil.createHttpResponse(FORBIDDEN))
-					.addListener(ChannelFutureListener.CLOSE);
+			ctx.writeAndFlush(resolveResponse(FORBIDDEN, request)).addListener(
+					ChannelFutureListener.CLOSE);
 			return;
-		} else if (request.getMethod().equals(HttpMethod.POST.name())) {
-			if (!StringUtil.isBlank(request.getSignature())
+		} else if (request.getMethod() == HttpMethod.POST) {
+			if (!ServerToolkits.isBlank(request.getSignature())
 					&& !MessageUtil.signature(aesToken.getToken(),
 							request.getTimeStamp(), request.getNonce()).equals(
 							request.getSignature())) {
-				ctx.writeAndFlush(HttpUtil.createHttpResponse(FORBIDDEN))
+				ctx.writeAndFlush(resolveResponse(FORBIDDEN, request))
 						.addListener(ChannelFutureListener.CLOSE);
 				return;
 			}
@@ -101,18 +103,27 @@ public class WeixinRequestHandler extends
 							request.getTimeStamp(), request.getNonce(),
 							request.getEncryptContent()).equals(
 							request.getMsgSignature())) {
-				ctx.writeAndFlush(HttpUtil.createHttpResponse(FORBIDDEN))
+				ctx.writeAndFlush(resolveResponse(FORBIDDEN, request))
 						.addListener(ChannelFutureListener.CLOSE);
 				return;
 			}
 		} else {
-			ctx.writeAndFlush(HttpUtil.createHttpResponse(METHOD_NOT_ALLOWED))
+			ctx.writeAndFlush(resolveResponse(METHOD_NOT_ALLOWED, request))
 					.addListener(ChannelFutureListener.CLOSE);
 			return;
 		}
 		WeixinMessageTransfer messageTransfer = MessageTransferHandler
 				.parser(request);
-		ctx.channel().attr(Consts.MESSAGE_TRANSFER_KEY).set(messageTransfer);
+		ctx.channel().attr(ServerToolkits.MESSAGE_TRANSFER_KEY)
+				.set(messageTransfer);
 		messageDispatcher.doDispatch(ctx, request, messageTransfer);
+	}
+
+	private FullHttpResponse resolveResponse(HttpResponseStatus responseStatus,
+			WeixinRequest request) {
+		FullHttpResponse response = new DefaultFullHttpResponse(
+				request.getProtocolVersion(), responseStatus);
+		HttpUtil.resolveHeaders(response);
+		return response;
 	}
 }

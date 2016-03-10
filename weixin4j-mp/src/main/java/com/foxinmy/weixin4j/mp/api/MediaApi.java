@@ -1,12 +1,8 @@
 package com.foxinmy.weixin4j.mp.api;
 
 import java.io.ByteArrayInputStream;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.Date;
@@ -24,6 +20,7 @@ import com.foxinmy.weixin4j.http.HttpMethod;
 import com.foxinmy.weixin4j.http.HttpParams;
 import com.foxinmy.weixin4j.http.HttpRequest;
 import com.foxinmy.weixin4j.http.HttpResponse;
+import com.foxinmy.weixin4j.http.apache.ByteArrayBody;
 import com.foxinmy.weixin4j.http.apache.FormBodyPart;
 import com.foxinmy.weixin4j.http.apache.InputStreamBody;
 import com.foxinmy.weixin4j.http.apache.StringBody;
@@ -45,9 +42,8 @@ import com.foxinmy.weixin4j.type.MediaType;
 import com.foxinmy.weixin4j.util.FileUtil;
 import com.foxinmy.weixin4j.util.IOUtil;
 import com.foxinmy.weixin4j.util.ObjectId;
+import com.foxinmy.weixin4j.util.RegexUtil;
 import com.foxinmy.weixin4j.util.StringUtil;
-import com.foxinmy.weixin4j.util.Weixin4jConfigUtil;
-import com.foxinmy.weixin4j.util.Weixin4jConst;
 import com.foxinmy.weixin4j.util.WeixinErrorUtil;
 
 /**
@@ -56,7 +52,7 @@ import com.foxinmy.weixin4j.util.WeixinErrorUtil;
  * @className MediaApi
  * @author jy.hu
  * @date 2014年9月25日
- * @since JDK 1.7
+ * @since JDK 1.6
  * @see com.foxinmy.weixin4j.type.MediaType
  */
 public class MediaApi extends MpApi {
@@ -194,12 +190,10 @@ public class MediaApi extends MpApi {
 				response = weixinExecutor
 						.post(String.format(material_media_upload_uri,
 								token.getAccessToken()), new FormBodyPart(
-								"media", new InputStreamBody(
-										new ByteArrayInputStream(content),
-										mediaType.getContentType()
-												.getMimeType(), fileName)),
-								new FormBodyPart("type", new StringBody(
-										mediaType.name(), Consts.UTF_8)));
+								"media", new ByteArrayBody(content, mediaType
+										.getContentType().getMimeType(),
+										fileName)), new FormBodyPart("type",
+								new StringBody(mediaType.name(), Consts.UTF_8)));
 				return new MediaUploadResult(response.getAsJson().getString(
 						"media_id"), mediaType, new Date());
 			} else {
@@ -228,61 +222,6 @@ public class MediaApi extends MpApi {
 				;
 			}
 		}
-	}
-
-	/**
-	 * 下载媒体素材
-	 * <p>
-	 * 正常情况下返回表头如Content-Type: image/jpeg,否则抛出异常.
-	 * </p>
-	 * 
-	 * @param mediaId
-	 *            存储在微信服务器上的媒体标识
-	 * @return 写入硬盘后的文件对象,存储路径见weixin4j.properties配置
-	 * @throws WeixinException
-	 * @see <a
-	 *      href="http://mp.weixin.qq.com/wiki/11/07b6b76a6b6e8848e855a435d5e34a5f.html">下载临时媒体文件</a>
-	 * @see <a
-	 *      href="http://mp.weixin.qq.com/wiki/4/b3546879f07623cb30df9ca0e420a5d0.html">下载永久媒体素材</a>
-	 * @see {@link #downloadMedia(String,boolean)}
-	 */
-	public File downloadMediaFile(String mediaId, boolean isMaterial)
-			throws WeixinException {
-		String media_path = Weixin4jConfigUtil.getValue("media_path",
-				Weixin4jConst.DEFAULT_MEDIA_PATH);
-		final String prefixName = String.format("%s.", mediaId);
-		File[] files = new File(media_path).listFiles(new FilenameFilter() {
-			@Override
-			public boolean accept(File dir, String name) {
-				return name.startsWith(prefixName);
-			}
-		});
-		if (files.length > 0) {
-			return files[0];
-		}
-		MediaDownloadResult result = downloadMedia(mediaId, isMaterial);
-		File file = new File(media_path + File.separator + result.getFileName());
-		OutputStream os = null;
-		try {
-			if (file.createNewFile()) {
-				os = new FileOutputStream(file);
-				os.write(result.getContent());
-			} else {
-				throw new WeixinException(String.format("create file fail:%s",
-						file.getAbsolutePath()));
-			}
-		} catch (IOException e) {
-			throw new WeixinException(e);
-		} finally {
-			try {
-				if (os != null) {
-					os.close();
-				}
-			} catch (IOException e) {
-				;
-			}
-		}
-		return file;
 	}
 
 	/**
@@ -341,8 +280,12 @@ public class MediaApi extends MpApi {
 							.getCode()), jsonResult.getDesc());
 				}
 			}
-			String fileName = String.format("%s.%s", mediaId,
-					contentType.split("/")[1]);
+			String fileName = RegexUtil
+					.regexFileNameFromContentDispositionHeader(disposition);
+			if (StringUtil.isBlank(fileName)) {
+				fileName = String.format("%s.%s", mediaId,
+						contentType.split("/")[1]);
+			}
 			return new MediaDownloadResult(content,
 					ContentType.create(contentType), fileName);
 		} catch (IOException e) {
@@ -457,6 +400,8 @@ public class MediaApi extends MpApi {
 	 * 
 	 * @param is
 	 *            大小不超过1M且格式为MP4的视频文件
+	 * @param fileName
+	 *            文件名 为空时将自动生成
 	 * @param title
 	 *            视频标题
 	 * @param introduction
@@ -466,8 +411,14 @@ public class MediaApi extends MpApi {
 	 *      href="http://mp.weixin.qq.com/wiki/14/7e6c03263063f4813141c3e17dd4350a.html">上传永久媒体素材</a>
 	 * @throws WeixinException
 	 */
-	public String uploadMaterialVideo(InputStream is, String title,
-			String introduction) throws WeixinException {
+	public String uploadMaterialVideo(InputStream is, String fileName,
+			String title, String introduction) throws WeixinException {
+		if (StringUtil.isBlank(fileName)) {
+			fileName = ObjectId.get().toHexString();
+		}
+		if (StringUtil.isBlank(FileUtil.getFileExtension(fileName))) {
+			fileName = String.format("%s.mp4", fileName);
+		}
 		String material_media_upload_uri = getRequestUri("material_media_upload_uri");
 		Token token = tokenHolder.getToken();
 		try {
@@ -478,10 +429,7 @@ public class MediaApi extends MpApi {
 					String.format(material_media_upload_uri,
 							token.getAccessToken()),
 					new FormBodyPart("media", new InputStreamBody(is,
-							MediaType.video.getContentType().getMimeType(),
-							ObjectId.get().toHexString())),
-					new FormBodyPart("type", new StringBody(MediaType.video
-							.name(), Consts.UTF_8)),
+							ContentType.VIDEO_MPEG4.getMimeType(), fileName)),
 					new FormBodyPart("description", new StringBody(description
 							.toJSONString(), Consts.UTF_8)));
 			return response.getAsJson().getString("media_id");
@@ -586,8 +534,12 @@ public class MediaApi extends MpApi {
 		MediaRecord mediaRecord = null;
 		for (;;) {
 			mediaRecord = listMaterialMedia(mediaType, pageable);
+			if (mediaRecord.getItems() == null
+					|| mediaRecord.getItems().isEmpty()) {
+				break;
+			}
 			mediaList.addAll(mediaRecord.getItems());
-			if (pageable.getOffset() >= mediaRecord.getTotalCount()) {
+			if (!mediaRecord.getPagedata().hasNext()) {
 				break;
 			}
 			pageable = pageable.next();

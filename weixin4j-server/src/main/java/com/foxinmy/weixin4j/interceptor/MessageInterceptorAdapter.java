@@ -13,7 +13,7 @@ import com.foxinmy.weixin4j.response.WeixinResponse;
  * @className MessageInterceptorAdapter
  * @author jy
  * @date 2015年5月14日
- * @since JDK 1.7
+ * @since JDK 1.6
  * @see
  */
 public abstract class MessageInterceptorAdapter implements
@@ -37,5 +37,9 @@ public abstract class MessageInterceptorAdapter implements
 			WeixinRequest request, WeixinResponse response, Object message,
 			WeixinMessageHandler handler, Exception exception)
 			throws WeixinException {
+	}
+
+	public int weight() {
+		return 0;
 	}
 }

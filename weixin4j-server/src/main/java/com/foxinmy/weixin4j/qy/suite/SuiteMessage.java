@@ -1,6 +1,5 @@
 package com.foxinmy.weixin4j.qy.suite;
 
-import java.beans.Transient;
 import java.io.Serializable;
 import java.util.Date;
 
@@ -13,15 +12,15 @@ import javax.xml.bind.annotation.XmlTransient;
 /**
  * 套件消息
  * 
- * @className WeixinSuiteMessage
+ * @className SuiteMessage
  * @author jy
  * @date 2015年6月23日
- * @since JDK 1.7
+ * @since JDK 1.6
  * @see
  */
 @XmlRootElement(name = "xml")
 @XmlAccessorType(XmlAccessType.FIELD)
-public class WeixinSuiteMessage implements Serializable {
+public class SuiteMessage implements Serializable {
 
 	private static final long serialVersionUID = 6457919241019021514L;
 	/**
@@ -43,7 +42,7 @@ public class WeixinSuiteMessage implements Serializable {
 	 * Ticket内容
 	 */
 	@XmlElement(name = "SuiteTicket")
-	private String SuiteTicket;
+	private String suiteTicket;
 	/**
 	 * 授权方企业号的corpid
 	 */
@@ -58,7 +57,6 @@ public class WeixinSuiteMessage implements Serializable {
 		return eventType;
 	}
 
-	@Transient
 	@XmlTransient
 	public SuiteEventType getFormatEventType() {
 		return SuiteEventType.valueOf(eventType);
@@ -68,14 +66,13 @@ public class WeixinSuiteMessage implements Serializable {
 		return timeStamp;
 	}
 
-	@Transient
 	@XmlTransient
 	public Date getFormatTimeStamp() {
 		return timeStamp > 0l ? new Date(timeStamp * 1000l) : null;
 	}
 
 	public String getSuiteTicket() {
-		return SuiteTicket;
+		return suiteTicket;
 	}
 
 	public String getAuthCorpId() {
@@ -84,8 +81,8 @@ public class WeixinSuiteMessage implements Serializable {
 
 	@Override
 	public String toString() {
-		return "WeixinSuiteMessage [suiteId=" + suiteId + ", eventType="
-				+ eventType + ", timeStamp=" + timeStamp + ", SuiteTicket="
-				+ SuiteTicket + ", authCorpId=" + authCorpId + "]";
+		return "SuiteMessage [suiteId=" + suiteId + ", eventType="
+				+ eventType + ", timeStamp=" + timeStamp + ", suiteTicket="
+				+ suiteTicket + ", authCorpId=" + authCorpId + "]";
 	}
 }
